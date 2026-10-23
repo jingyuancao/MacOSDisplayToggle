@@ -1,0 +1,23 @@
+# 构建产物
+build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode / SwiftPM（本项目不用，但防止误提交）
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+.build/
+.swiftpm/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 本地工作区数据
+.workbuddy/

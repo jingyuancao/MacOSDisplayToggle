@@ -12,6 +12,7 @@ Apple Silicon + macOS 13+，纯 Swift，`swiftc` 直接编译，无第三方依�
 | `./build.sh` | 构建到 `build/`，不碰正在运行的 App |
 | `./build.sh --install` | 装到 `/Applications` 并重启顶栏 App；会杀掉运行中的实例，执行前先确认 |
 | `./scripts/test-blackout.sh` | 黑屏判定回归测试；改 `BlackoutJudge` / `externalLink` 后必跑 |
+| `./scripts/test-login-item.sh` | 登录项策略回归测试；改 `LoginItemPolicy` / `autostart` 后必跑 |
 | `./scripts/probe-displays.sh` | 只读信号探针；排查拔线、幽灵屏时用 |
 | `macosdisplaytoggle status` | 查看当前显示器与开关状态 |
 
@@ -30,6 +31,7 @@ Apple Silicon + macOS 13+，纯 Swift，`swiftc` 直接编译，无第三方依�
 - 系统接口：`Sources/DisplayAPI.swift`（无状态）
 - 业务状态：`Sources/DisplayStore.swift`（下线记录、开关、恢复、救援）
 - 黑屏判定：`Sources/BlackoutJudge.swift`（纯函数，`BlackoutSignals` 注入）
+- 登录时启动：`Sources/LoginItem.swift`（路径策略、状态映射、CLI 解析、`SMAppService` 接缝）
 - UI：`Sources/Panel.swift`
 - 入口与看门狗：`Sources/main.swift`
 - 日志：`Sources/EventLog.swift` → `~/Library/Logs/MacOSDisplayToggle/events.log`
@@ -49,5 +51,6 @@ Apple Silicon + macOS 13+，纯 Swift，`swiftc` 直接编译，无第三方依�
 ## 验证
 
 - 判定逻辑：`./scripts/test-blackout.sh` 必须红→绿；新增判定分支时补用例。
+- 登录项逻辑：`./scripts/test-login-item.sh` 必须红→绿；只测纯判断，`SMAppService` 的实际调用靠真机对照 `sfltool dumpbtm`。
 - 真机行为：本机就是测试机。测试拔线/关屏时，手边留好外接线的插回路径，不要让自己处于无屏状态。
 - 排查黑屏：先读 `events.log`，再用 `probe-displays.sh` 对照 `online / active / ws / externalLink`。

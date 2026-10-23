@@ -7,7 +7,7 @@
 import Foundation
 
 enum AppVersion {
-    static let number = "0.9.0"
+    static let number = "0.10.0"
 
     /// 构建号（构建时间 yyyyMMddHHmm），直接编译的测试程序里没有 Info.plist，显示 dev
     ///

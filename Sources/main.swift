@@ -9,7 +9,7 @@ import Foundation
 // MARK: - 命令行
 
 enum CLI {
-    private static let commands = ["status", "only", "all", "toggle", "version", "--version", "-v",
+    private static let commands = ["status", "only", "all", "toggle", "autostart", "version", "--version", "-v",
                                    "help", "--help", "-h"]
 
     static func shouldHandle(_ args: [String]) -> Bool {
@@ -17,6 +17,11 @@ enum CLI {
     }
 
     static func run(_ args: [String]) -> Int32 {
+        // autostart 直接和系统登录项打交道，不初始化 DisplayStore，免得顺手碰显示接口
+        if args[1] == "autostart" {
+            return runAutostart(Array(args.dropFirst(2)))
+        }
+
         let store = DisplayStore.shared
 
         switch args[1] {
@@ -81,6 +86,63 @@ enum CLI {
         }
     }
 
+    // MARK: 登录时启动
+
+    private static func runAutostart(_ arguments: [String]) -> Int32 {
+        reexecInsideAppIfNeeded()
+
+        let command = AutostartCLI.parse(arguments)
+        if case .invalid(let word) = command {
+            print("未知的 autostart 参数：\(word)")
+            print("用法：macosdisplaytoggle autostart [on|off|status]")
+            return 1
+        }
+
+        let item = SystemLoginItem()
+        if case .status = command {
+            print(statusLine(for: item.currentState()))
+            return 0
+        }
+
+        let controller = LoginItemController(service: item, log: EventLog.write)
+        guard controller.setOn(command == .on) else {
+            print("设置失败：\(controller.errorText ?? "未知错误")")
+            return 1
+        }
+        print(statusLine(for: controller.state))
+        return 0
+    }
+
+    private static func statusLine(for state: LoginItemState) -> String {
+        let path = Bundle.main.bundleURL.path
+        switch state {
+        case .on:
+            return "开机启动：已开启（\(path)）"
+        case .off:
+            return "开机启动：未开启"
+        case .needsApproval:
+            return "开机启动：已开启，但需要在「系统设置 → 登录项」中允许"
+        case .unavailable:
+            return "开机启动：仅安装版可用（当前运行于 \(path)）"
+        }
+    }
+
+    /// 经 /usr/local/bin/macosdisplaytoggle 符号链接调用时，Bundle.main 不会顺着链接
+    /// 找到 .app（实测 bundleIdentifier 为 nil），而 SMAppService 认的是 .app 包本身。
+    /// 解析出真实可执行文件后原地 exec 一次，后续代码就能拿到正确的 Bundle。
+    private static func reexecInsideAppIfNeeded() {
+        guard Bundle.main.bundleIdentifier == nil,
+              let linked = Bundle.main.executableURL else { return }
+        let real = linked.resolvingSymlinksInPath()
+        guard real.path != linked.path else { return }
+
+        let arguments = [real.path] + Array(CommandLine.arguments.dropFirst())
+        var argv = arguments.map { strdup($0) }
+        argv.append(nil)
+        _ = execv(real.path, argv)
+        // execv 只有失败才返回；继续走原逻辑，最终会以「非安装版」报错，不会误操作
+    }
+
     private static func printHelp() {
         print("""
         MacOSDisplayToggle \(AppVersion.full) — 外接屏一线通时，自由决定哪块屏用于显示
@@ -90,6 +152,8 @@ enum CLI {
           MacOSDisplayToggle only      关闭全部外接屏，只留内屏（充电照常）
           MacOSDisplayToggle all       恢复所有显示器
           MacOSDisplayToggle toggle    在两者之间切换
+          MacOSDisplayToggle autostart [on|off|status]
+                                       登录时启动（不带参数时查看状态）
           MacOSDisplayToggle version   显示版本号
 
         不带参数运行则启动顶栏图标。
@@ -122,6 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model.refresh(force: true)
         updateIcon()
+        // 换掉 App 后 ad-hoc 的 cdhash 会变；本来开着的话重放一次注册，把记录对上新二进制
+        model.loginItem.reconcileOnLaunch()
         EventLog.write("启动 \(AppVersion.full)；在线 \(EventLog.displaySummary())")
 
         // 每秒做一次底线巡检；面板收起时顺带同步状态（用户可能通过命令行或系统设置改了状态）
@@ -188,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setUpPopover() {
-        let hosting = NSHostingController(rootView: PanelView(model: model))
+        let hosting = NSHostingController(rootView: PanelView(model: model, loginItem: model.loginItem))
         hosting.sizingOptions = NSHostingSizingOptions.preferredContentSize
 
         popover = NSPopover()
@@ -206,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         model.refresh(force: true)
+        model.loginItem.refresh()
         updateIcon()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
@@ -228,7 +295,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - 入口
 
 if CLI.shouldHandle(CommandLine.arguments) {
-    exit(CLI.run(CommandLine.arguments))
+    let code = CLI.run(CommandLine.arguments)
+    EventLog.flush()
+    exit(code)
 }
 
 let app = NSApplication.shared

@@ -19,7 +19,7 @@
 
 ```
 ┌──────────────────────────────────────┐
-│ 用于显示的显示器              v0.9.0  │
+│ 用于显示的显示器             v0.10.0  │
 │                                      │
 │ 💻 Built-in Retina Display      [●]  │
 │    内屏                               │
@@ -31,6 +31,8 @@
 │ 分辨率缩放范围              150% – 200% │
 │ ●━━━━━━━━●────────────────────────── │
 │ 100 125 150 175 200 225 250 275 300  │
+│ ──────────────────────────────────── │
+│ 登录时启动                       [○] │
 │ ──────────────────────────────────── │
 │        ⏻ 恢复全部显示器并退出          │
 └──────────────────────────────────────┘
@@ -72,6 +74,11 @@
 
 分辨率切换等同于在系统设置里改，**重启后保持**；开关状态则是临时的，工具退出或重启就恢复。
 
+**登录时启动**：面板底部的开关把 App 注册为系统登录项（`SMAppService`），登录后自动拉起顶栏 App，
+**不改变任何显示器配置**。状态以系统为准——在「系统设置 → 通用 → 登录项」里关掉后，
+面板会显示「需在系统设置中允许」，点那行文字可直接跳过去。只有装在 `/Applications` 的版本能开启；
+`build/` 里的开发版会置灰，避免登录项指向随时会被删掉的构建产物。
+
 图标跟随状态变化：双屏是两个方块，仅内屏是笔记本。
 
 ## 命令行
@@ -81,6 +88,7 @@ macosdisplaytoggle status    # 列出显示器与开关状态
 macosdisplaytoggle only      # 关闭全部外接屏
 macosdisplaytoggle all       # 恢复所有显示器
 macosdisplaytoggle toggle    # 两者切换
+macosdisplaytoggle autostart [on|off|status]   # 登录时启动，不带参数即查看状态
 macosdisplaytoggle version   # 显示版本号
 ```
 
@@ -96,7 +104,8 @@ cd MacOSDisplayToggle
 
 只构建不安装：`./build.sh && open build/MacOSDisplayToggle.app`
 
-开机自启：系统设置 → 通用 → 登录项 → 添加 MacOSDisplayToggle。
+开机自启：在面板底部打开「登录时启动」，或执行 `macosdisplaytoggle autostart on`。
+登录项由系统托管，可在「系统设置 → 通用 → 登录项」里查看和撤销；只有 `/Applications` 里的安装版能开启。
 
 本地构建用的是 ad-hoc 签名，不经过公证。自己从源码构建运行不受影响；如果把构建好的 `.app` 拷给别人，
 对方首次打开需要右键 →「打开」。
@@ -108,6 +117,7 @@ cd MacOSDisplayToggle
 | `Sources/DisplayAPI.swift` | 系统接口层。SkyLight 私有调用、显示器枚举、显示模式枚举与切换。无状态，可单独验证。 |
 | `Sources/DisplayStore.swift` | 状态与业务规则。下线记录持久化、开关、恢复、分辨率切换、安全阀。 |
 | `Sources/BlackoutJudge.swift` | 黑屏判定的纯函数。信号由调用方注入，便于用真实拔线场景做回归测试。 |
+| `Sources/LoginItem.swift` | 「登录时启动」：登录项状态映射、`/Applications` 路径策略、CLI 参数解析、`LoginItem` 接缝与控制器。 |
 | `Sources/Panel.swift` | 视图层。面板布局、双端滑块、分辨率下拉、自绘开关。 |
 | `Sources/main.swift` | 入口。CLI 子命令与顶栏 App 共用同一个二进制；顶栏 App 负责黑屏巡检。 |
 | `Sources/EventLog.swift` | 本地事件日志，记录开关、恢复、拓扑变化与黑屏救援的每一步。 |
@@ -119,6 +129,8 @@ cd MacOSDisplayToggle
 | --- | --- |
 | `Tests/BlackoutJudge/main.swift` | 黑屏判定回归测试用例 |
 | `scripts/test-blackout.sh` | 编译并运行回归测试，一条命令给出红/绿 |
+| `Tests/LoginItem/main.swift` | 登录项路径判定、状态映射、启动自愈与 CLI 解析的回归测试 |
+| `scripts/test-login-item.sh` | 编译并运行登录项测试 |
 | `scripts/probe-displays.sh` | 只读信号探针，排查拔线、幽灵屏等问题 |
 | `debug/DisplayProbe/main.swift` | 探针源码 |
 
@@ -229,12 +241,13 @@ CGCompleteDisplayConfiguration(cfg, kCGConfigureForSession);   // 公开
 ## 版本说明
 
 当前版本在面板右上角、命令行 `macosdisplaytoggle version`（或 `status` 第一行）、顶栏图标的悬停提示里都能看到。
-完整版本形如 `v0.9.0 (build 202610231716)`，build 号是构建时间，用于区分同一版本的多次构建。
+完整版本形如 `v0.10.0 (build 202610231716)`，build 号是构建时间，用于区分同一版本的多次构建。
 
 发版约定：改 `Sources/Version.swift` 里的 `number`，在下表追加一行，再执行 `./build.sh --install`。
 
 | 版本 | 变更 |
 | --- | --- |
+| **v0.10.0** | 新增「登录时启动」：面板底部开关与 `autostart` 命令，用 `SMAppService` 注册系统登录项；状态以系统为准，可在「系统设置 → 通用 → 登录项」撤销；仅 `/Applications` 安装版可用；启动时静默刷新注册记录，`./build.sh --install` 重建后无需重新开关。 |
 | **v0.9.0** | 项目更名：OnlyInternal → **MacOSDisplayToggle**（App、命令行 `macosdisplaytoggle`、Bundle ID `io.github.jingyuancao.MacOSDisplayToggle`、仓库名一并更改）。首次运行会自动沿用旧版的下线记录和缩放范围设置；日志目录改为 `~/Library/Logs/MacOSDisplayToggle/`。功能无变化。 |
 | v0.8.1 | 开源发布：MIT 许可证；Bundle ID 改为 `io.github.jingyuancao.OnlyInternal`（缩放范围设置会回到默认 150%–200%）；截图移到 `docs/`；README 补充环境要求与 clone 安装方式。功能无变化。 |
 | v0.8.0 | 修复「只用外屏时拔线一直黑屏」：守护原来只认「在线列表为空」，拔线后外接屏可能残留在列表里，守护一直不触发。现在同时识别「被系统移除的残留」和「视频链路已断开」；巡检从 2 秒缩短到 1 秒；禁用 App Nap，防止黑屏时定时器被节流。新增版本号显示、`version` 命令、本地事件日志 `~/Library/Logs/OnlyInternal/events.log`。`--install` 会自动退出旧版并启动新版。 |

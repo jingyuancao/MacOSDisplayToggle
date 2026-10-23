@@ -37,6 +37,9 @@ final class PanelModel: ObservableObject {
 
     let drag = DragState()
 
+    /// 登录项状态归系统管，这里只负责展示与转发操作；每次打开面板重新读系统
+    let loginItem = LoginItemController(service: SystemLoginItem(), log: EventLog.write)
+
     private let store = DisplayStore.shared
 
     var hasExternalEnabled: Bool {
@@ -140,6 +143,7 @@ final class PanelModel: ObservableObject {
 
 struct PanelView: View {
     @ObservedObject var model: PanelModel
+    @ObservedObject var loginItem: LoginItemController
 
     private enum Layout {
         static let width: CGFloat = 300
@@ -178,6 +182,10 @@ struct PanelView: View {
 
             Divider()
 
+            loginItemRow
+
+            Divider()
+
             quitButton
         }
         .frame(width: Layout.width)
@@ -203,6 +211,48 @@ struct PanelView: View {
         .foregroundStyle(.orange)
         .padding(.horizontal, Layout.horizontalPadding)
         .padding(.bottom, 8)
+    }
+
+    /// 登录时启动：状态是系统给的，界面如实反映，不在本地留副本
+    private var loginItemRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text("登录时启动")
+                    .font(.system(size: 12))
+                    .foregroundStyle(loginItem.state == .unavailable ? Color.secondary : Color.primary)
+                Spacer(minLength: 8)
+                PanelSwitch(isOn: loginItem.state.isEnabled) { on in
+                    loginItem.setOn(on)
+                }
+                .opacity(loginItem.state == .unavailable ? 0.35 : 1)
+                .allowsHitTesting(loginItem.state != .unavailable)
+            }
+
+            switch loginItem.state {
+            case .needsApproval:
+                Button("需在系统设置中允许") {
+                    loginItem.openSettings()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.accentColor)
+            case .unavailable:
+                Text("仅 /Applications 里的安装版可用")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            case .on, .off:
+                EmptyView()
+            }
+
+            if let error = loginItem.errorText {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.vertical, 8)
     }
 
     private var quitButton: some View {

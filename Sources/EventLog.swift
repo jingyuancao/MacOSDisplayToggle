@@ -30,6 +30,12 @@ enum EventLog {
         queue.async { append(line) }
     }
 
+    /// 等队列里的日志真正落盘。
+    /// 命令行进程打印完就 exit，异步写入来不及执行，调用方必须在退出前 sync 一次。
+    static func flush() {
+        queue.sync {}
+    }
+
     /// 当前在线显示器的一行摘要，例如「1内 3外」，空列表显示「无」
     static func displaySummary() -> String {
         let ids = Screens.ids().sorted()

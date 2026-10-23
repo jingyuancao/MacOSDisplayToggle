@@ -107,10 +107,20 @@ cd MacOSDisplayToggle
 | --- | --- |
 | `Sources/DisplayAPI.swift` | 系统接口层。SkyLight 私有调用、显示器枚举、显示模式枚举与切换。无状态，可单独验证。 |
 | `Sources/DisplayStore.swift` | 状态与业务规则。下线记录持久化、开关、恢复、分辨率切换、安全阀。 |
+| `Sources/BlackoutJudge.swift` | 黑屏判定的纯函数。信号由调用方注入，便于用真实拔线场景做回归测试。 |
 | `Sources/Panel.swift` | 视图层。面板布局、双端滑块、分辨率下拉、自绘开关。 |
 | `Sources/main.swift` | 入口。CLI 子命令与顶栏 App 共用同一个二进制；顶栏 App 负责黑屏巡检。 |
 | `Sources/EventLog.swift` | 本地事件日志，记录开关、恢复、拓扑变化与黑屏救援的每一步。 |
 | `Sources/Version.swift` | 版本号唯一来源，build.sh 从这里读取写入 Info.plist。 |
+
+回归测试与诊断工具：
+
+| 路径 | 用途 |
+| --- | --- |
+| `Tests/BlackoutJudge/main.swift` | 黑屏判定回归测试用例 |
+| `scripts/test-blackout.sh` | 编译并运行回归测试，一条命令给出红/绿 |
+| `scripts/probe-displays.sh` | 只读信号探针，排查拔线、幽灵屏等问题 |
+| `debug/DisplayProbe/main.swift` | 探针源码 |
 
 `./build.sh` 直接用 `swiftc` 把 `Sources/` 下的文件编译成 app bundle，不需要 Xcode 工程，也没有第三方依赖。
 

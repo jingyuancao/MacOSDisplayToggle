@@ -88,6 +88,33 @@ enum Screens {
         return Set(ids.prefix(Int(count)))
     }
 
+    /// 当前「活跃」的显示器，供诊断探针使用。
+    ///
+    /// 注意：实测拔线后残留的新 ID 幽灵屏**也会出现在 active 列表里**，
+    /// 所以不能单靠它判断「有没有画面」，真正的依据是链路状态（`externalLink`）。
+    static func activeIDs() -> Set<CGDirectDisplayID> {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        guard count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+        return Set(ids.prefix(Int(count)))
+    }
+
+    /// WindowServer 交给 App 绘制的屏幕集合，供诊断探针使用。
+    ///
+    /// 注意：实测拔线后 NSScreen 可能陈旧十几秒仍列出已断开的屏，
+    /// 因此它不能作为「现在到底有没有画面」的实时依据。
+    static func windowServerIDs() -> Set<CGDirectDisplayID> {
+        var result = Set<CGDirectDisplayID>()
+        for screen in NSScreen.screens {
+            if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+                result.insert(number.uint32Value)
+            }
+        }
+        return result
+    }
+
     /// 在线显示器及其名字。名字与刘海信息只遍历一次 NSScreen。
     static func online() -> [ScreenInfo] {
         let meta = screenMeta()
@@ -132,8 +159,11 @@ enum Screens {
 
     /// 视频链路上是否挂着外接屏。即使这块屏已被下线、不在在线列表里，也能识别出来。
     ///
-    /// - Returns: `true` 有外接链路；`false` 确定没有；`nil` 无法判断（本机没有 DCP AV 服务，
-    ///   比如非 Apple Silicon）。调用方遇到 nil 必须按「可能有」处理，不能据此清理记录。
+    /// - Returns: `true` 有外接链路；`false` 确定没有；`nil` 无法判断（IOKit 查询失败）。
+    ///
+    /// 注意「查询成功但一个服务都没有」必须返回 `false`，不能返回 `nil`。
+    /// 拔线后 DCPAVServiceProxy 会整体消失，旧实现把它当成「无法判断」，
+    /// 导致黑屏兜底在「关内屏 + 拔线」时永远不触发。只有查询本身失败才是 `nil`。
     static func externalLink() -> Bool? {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault,
@@ -141,20 +171,24 @@ enum Screens {
                                            &iterator) == KERN_SUCCESS else { return nil }
         defer { IOObjectRelease(iterator) }
 
-        var sawAnyService = false
-        var found = false
+        var locations: [String] = []
         var service = IOIteratorNext(iterator)
         while service != 0 {
-            sawAnyService = true
             if let location = IORegistryEntryCreateCFProperty(service, "Location" as CFString,
                                                               kCFAllocatorDefault, 0)?
-                .takeRetainedValue() as? String, location == "External" {
-                found = true
+                .takeRetainedValue() as? String {
+                locations.append(location)
             }
             IOObjectRelease(service)
             service = IOIteratorNext(iterator)
         }
-        return sawAnyService ? found : nil
+        return externalLink(querySucceeded: true, locations: locations)
+    }
+
+    /// 把 IOKit 查询结果翻译成链路状态，便于用真实拔线场景做回归测试。
+    static func externalLink(querySucceeded: Bool, locations: [String]) -> Bool? {
+        guard querySucceeded else { return nil }
+        return locations.contains("External")
     }
 }
 

@@ -394,24 +394,20 @@ final class DisplayStore {
     /// 收到过系统的「移除」通知、或 IOKit 显示视频链路已断开，都说明列表里的外接屏只是残留。
     func blackoutReason() -> String? {
         reloadIfChangedOnDisk()
+        return BlackoutJudge.reason(currentSignals())
+    }
+
+    /// 把当前系统状态翻译成判断模块的输入
+    private func currentSignals() -> BlackoutSignals {
         let online = Screens.ids()
-        if online.isEmpty { return "在线显示器列表为空" }
-
-        // 内屏在线，画面至少在内屏上
-        if online.contains(where: { CGDisplayIsBuiltin($0) != 0 }) { return nil }
-
-        // 内屏不在线（被我们关了，或合盖）。只有被我们关掉时才需要介入，合盖由系统自己处理
-        guard state.disabled.contains(where: { $0.isBuiltin == true }) else { return nil }
-
-        let externals = online.filter { CGDisplayIsBuiltin($0) == 0 }
-        let stale = externals.filter { removedDisplays.contains($0) }
-        if !externals.isEmpty, stale.count == externals.count {
-            return "内屏已关闭，外接屏 \(stale.sorted()) 已被系统移除（列表残留）"
-        }
-        if Screens.externalLink() == false {
-            return "内屏已关闭，外接视频链路已断开（列表中的 \(externals.sorted()) 是残留）"
-        }
-        return nil
+        let builtin = online.filter { CGDisplayIsBuiltin($0) != 0 }
+        return BlackoutSignals(
+            online: online,
+            builtinOnline: Set(builtin),
+            disabledBuiltin: state.disabled.contains { $0.isBuiltin == true },
+            removed: removedDisplays,
+            externalLink: Screens.externalLink()
+        )
     }
 
     /// 系统通知过「已移除」、但可能还残留在在线列表里的显示器。由顶栏 App 的拓扑回调维护。

@@ -42,10 +42,12 @@ echo "构建完成：$(pwd)/$APP"
 if [[ "${1:-}" == "--install" ]]; then
     DEST="/Applications/$APP_NAME.app"
 
-    # 先退出所有正在运行的实例（无论是 build/ 下的还是 /Applications 下的旧版）
-    if pgrep -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" >/dev/null; then
+    # 先退出所有正在运行的实例。按进程名匹配而不是命令行：经
+    # /usr/local/bin/macosdisplaytoggle 符号链接启动的实例，argv 里没有 .app 路径，
+    # pkill -f 匹配不到，会留下旧实例占着 LaunchServices 的「已运行」登记，导致 open 不启动新版。
+    if pgrep -x "$APP_NAME" >/dev/null; then
         echo "▸ 退出正在运行的旧版本 ..."
-        pkill -f "$APP_NAME.app/Contents/MacOS/$APP_NAME" || true
+        pkill -x "$APP_NAME" || true
         sleep 1
     fi
 
@@ -63,6 +65,11 @@ if [[ "${1:-}" == "--install" ]]; then
     echo "▸ 启动新版本 ..."
     open "$DEST"
     sleep 2
+    if ! pgrep -x "$APP_NAME" >/dev/null; then
+        echo "" >&2
+        echo "⚠️ 安装完成，但启动后没检测到进程。请手动打开 $DEST，并查看 ~/Library/Logs/MacOSDisplayToggle/events.log" >&2
+        exit 1
+    fi
     echo ""
     echo "已安装并启动：$("$DEST/Contents/MacOS/$APP_NAME" version)"
 fi

@@ -129,9 +129,9 @@ CGError CGSConfigureDisplayEnabled(CGSConfigDataRef cfg, CGDirectDisplayID displ
 **第一个参数不是连接 ID，而是显示配置对象** —— 这点最容易踩坑：按 `(connectionID, display, bool)` 传，系统会把 connection ID 当指针解引用，进程直接段错误（崩溃栈停在 `checkCapacity(CGSConfigData*)`，地址恰好就是传入的 cid）。正确用法是借用公开 API 的事务对象把私有调用包起来：
 
 ```c
-CGBeginMacOSDisplayToggleuration(&cfg);                            // 公开
+CGBeginDisplayConfiguration(&cfg);                            // 公开
 CGSConfigureDisplayEnabled(cfg, display, 0);                  // 私有
-CGCompleteMacOSDisplayToggleuration(cfg, kCGConfigureForSession);   // 公开
+CGCompleteDisplayConfiguration(cfg, kCGConfigureForSession);   // 公开
 ```
 
 效果等价于在系统设置里把这个显示器「拔掉」：桌面空间回收、窗口自动迁回内屏、光标不会再跑到外接屏。DisplayPort 的 PD 供电是独立链路，因此充电和 USB 数据都不受影响。
@@ -219,7 +219,7 @@ CGCompleteMacOSDisplayToggleuration(cfg, kCGConfigureForSession);   // 公开
 ## 版本说明
 
 当前版本在面板右上角、命令行 `macosdisplaytoggle version`（或 `status` 第一行）、顶栏图标的悬停提示里都能看到。
-完整版本形如 `v0.8.0 (build 202610231625)`，build 号是构建时间，用于区分同一版本的多次构建。
+完整版本形如 `v0.9.0 (build 202610231716)`，build 号是构建时间，用于区分同一版本的多次构建。
 
 发版约定：改 `Sources/Version.swift` 里的 `number`，在下表追加一行，再执行 `./build.sh --install`。
 
@@ -241,10 +241,6 @@ CGCompleteMacOSDisplayToggleuration(cfg, kCGConfigureForSession);   // 公开
 - macOS 27.0.1（Build 26A434），Apple M4 Pro
 - 内屏 3456×2234（带刘海），外接三星 LS27D80xU 4K，Type-C 一线通
 - 编译与运行均无需 root、无需辅助功能权限、无需屏幕录制权限
-
-## 许可证
-
-[MIT](LICENSE)。本工具调用了 macOS 私有接口（SkyLight），系统升级后可能失效；使用风险自负。
 
 ## 许可证
 
